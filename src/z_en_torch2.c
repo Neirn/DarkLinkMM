@@ -43,6 +43,21 @@ ActorProfile En_Torch2_Profile = {
     /**/ EnTorch2_Draw,
 };
 
+s16 CUSTOM_ACTOR_EN_DARKLINK = ACTOR_ID_MAX;
+
+RECOMP_CALLBACK("*", recomp_on_init) 
+void OoTArwing_OnRecompInit() {
+    CUSTOM_ACTOR_EN_ARWING = CustomActor_Register(&En_Torch2_Profile);
+}
+
+// Spawn Arwing in South Clock Town
+RECOMP_HOOK("Actor_SpawnTransitionActors")
+void OoTArwing_OnRoomLoad(PlayState* play, ActorContext* actorCtx) {
+    if (play->sceneId == SCENE_CLOCKTOWER) {
+        Actor_SpawnAsChildAndCutscene(&play->actorCtx, play, CUSTOM_ACTOR_EN_DARKLINK, -367.0f, 50.0f, -245.0f, 0, 0x8000, 0, 0, 0, 0, 0);
+    }
+}
+
 static f32 sStickTilt = 0.0f;
 static s16 sStickAngle = 0;
 static f32 sSwordJumpHeight = 0.0f;
