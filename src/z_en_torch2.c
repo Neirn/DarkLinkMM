@@ -138,35 +138,49 @@ static EffectTireMarkInit sTireMarkInit = {
     { 0, 0, 15, 100 },
 };
 
+static PlayerAgeProperties darkLinkProperties;
+
 void EnTorch2_Init(Actor* thisx, PlayState* play2) {
-    recomp_printf("start init\n");
-    recomp_printf("start init\n");
-    
     PlayState* play = play2;
     Player* this = (Player*)thisx;
 
-    recomp_printf("start input\n");
     sInput.cur.button = sInput.press.button = sInput.rel.button = 0;
     sInput.cur.stick_x = sInput.cur.stick_y = 0;
-    recomp_printf("input done\n");
     // this->currentShield = PLAYER_SHIELD_HYLIAN;
     // this->heldItemAction = this->heldItemId = PLAYER_IA_SWORD_MASTER;
     // Player_SetModelGroup(this, PLAYER_MODELGROUP_SWORD_AND_SHIELD);
-    recomp_printf("model stuff\n");
     this->currentShield = PLAYER_SHIELD_HEROS_SHIELD;
     this->heldItemAction = this->heldItemId = PLAYER_IA_SWORD_GILDED;
 
     this->actor.room = -1;
     this->csId = CS_ID_NONE;
     this->transformation = PLAYER_FORM_HUMAN;
-    this->ageProperties = &sPlayerAgeProperties[PLAYER_FORM_ZORA];;
+    
+    // copied from oot age properties
+    darkLinkProperties = sPlayerAgeProperties[PLAYER_FORM_ZORA];
+    darkLinkProperties = sPlayerAgeProperties[PLAYER_FORM_ZORA];
+    darkLinkProperties.unk_28 = 44.8f;
+    darkLinkProperties.unk_3C = 15.0f;
+    darkLinkProperties.unk_44 = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_44;
+    darkLinkProperties.unk_4A->x = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_4A->x;
+    darkLinkProperties.unk_4A->y = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_4A->y;
+    darkLinkProperties.unk_4A->z = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_4A->z;
+    darkLinkProperties.unk_62->x = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_62->x;
+    darkLinkProperties.unk_62->y = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_62->y;
+    darkLinkProperties.unk_62->z = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_62->z;
+    darkLinkProperties.unk_7A->x = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_7A->x;
+    darkLinkProperties.unk_7A->y = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_7A->y;
+    darkLinkProperties.unk_7A->z = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_7A->z;
+    darkLinkProperties.voiceSfxIdOffset = SFX_VOICE_BANK_SIZE * 0;
+    darkLinkProperties.surfaceSfxIdOffset = 0x80;
+
+    this->ageProperties = &darkLinkProperties;
+
     this->heldItemAction = PLAYER_IA_NONE;
     this->heldItemId = ITEM_OCARINA_OF_TIME;
 
     Player_SetModelGroup(this, PLAYER_MODELGROUP_ONE_HAND_SWORD);
-    recomp_printf("model done, player init\n");
     play->playerInit(this, play, &gDarkLinkSkel);
-    recomp_printf("player init done\n");
     // this->actor.naviEnemyId = NAVI_ENEMY_DARK_LINK;
     this->cylinder.base.acFlags = AC_ON | AC_TYPE_PLAYER;
     this->meleeWeaponQuads[0].base.atFlags = this->meleeWeaponQuads[1].base.atFlags = AT_ON | AT_TYPE_ENEMY;
@@ -181,15 +195,11 @@ void EnTorch2_Init(Actor* thisx, PlayState* play2) {
     this->actor.colChkInfo.cylRadius = 60;
     this->actor.colChkInfo.cylHeight = 100;
 
-    recomp_printf("collider done\n");
-
     Effect_Add(play, &this->meleeWeaponEffectIndex[0], EFFECT_BLURE2, 0, 0, &sBlureInit);
     Effect_Add(play, &this->meleeWeaponEffectIndex[1], EFFECT_BLURE2, 0, 0, &sBlureInit);
     Effect_Add(play, &this->meleeWeaponEffectIndex[2], EFFECT_TIRE_MARK, 0, 0, &sTireMarkInit);
 
-
     play->func_18780(this, play);
-    recomp_printf("play func done\n");
 
     sActionState = ENTORCH2_WAIT;
     sDodgeRollState = 0;
@@ -201,7 +211,6 @@ void EnTorch2_Init(Actor* thisx, PlayState* play2) {
     sLastSwordAnim = 0;
     sAlpha = 95;
     sSpawnPoint = this->actor.home.pos;
-    recomp_printf("init done\n");
 }
 
 void EnTorch2_Destroy(Actor* thisx, PlayState* play) {
@@ -1007,16 +1016,20 @@ void EnTorch2_Draw(Actor* thisx, PlayState* play2) {
         func_8002EBCC(&this->actor, play, 0);
         func_8002ED80(&this->actor, play, 0);
         POLY_OPA_DISP =
+            // SkelAnime_DrawFlex(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount,
+            //                    EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDraw, &this->actor, POLY_OPA_DISP);
             SkelAnime_DrawFlex(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount,
-                               EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDraw, &this->actor, POLY_OPA_DISP);
+                               NULL, NULL, &this->actor, POLY_OPA_DISP);
     } else {
         gDPSetEnvColor(POLY_XLU_DISP++, 255, 0, 0, sAlpha);
         gSPSegment(POLY_XLU_DISP++, 0x0C, D_80116280);
         func_8002EBCC(&this->actor, play, 0);
         func_8002ED80(&this->actor, play, 0);
         POLY_XLU_DISP =
+            // SkelAnime_DrawFlex(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount,
+            //                    EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDraw, &this->actor, POLY_XLU_DISP);
             SkelAnime_DrawFlex(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount,
-                               EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDraw, &this->actor, POLY_XLU_DISP);
+                               NULL, NULL, &this->actor, POLY_XLU_DISP);
     }
     CLOSE_DISPS(play->state.gfxCtx);
 }
