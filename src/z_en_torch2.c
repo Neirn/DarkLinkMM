@@ -15,8 +15,6 @@
 
 #include "object_torch2/object_torch2.h"
 
-#pragma increment_block_number "ique-cn:128"
-
 #define FLAGS                                                                                 \
     (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED | \
      ACTOR_FLAG_DRAW_CULLING_DISABLED)
@@ -145,12 +143,76 @@ void EnTorch2_Destroy(Actor* thisx, PlayState* play) {
     s32 pad;
     Player* this = (Player*)thisx;
 
-    Effect_Delete(play, this->meleeWeaponEffectIndex);
+    // Effect_Delete(play, this->meleeWeaponEffectIndex);
+    Effect_Destroy(play, this->meleeWeaponEffectIndex[0]);
     Audio_RestorePrevBgm();
     Collider_DestroyCylinder(play, &this->cylinder);
     Collider_DestroyQuad(play, &this->meleeWeaponQuads[0]);
     Collider_DestroyQuad(play, &this->meleeWeaponQuads[1]);
     Collider_DestroyQuad(play, &this->shieldQuad);
+}
+
+#include "overlays/actors/ovl_Arms_Hook/z_arms_hook.h"
+
+Actor* Actor_GetProjectileActor(PlayState* play, Actor* refActor, f32 radius) {
+    Actor* actor;
+    Vec3f spA8;
+    Vec3f delta;
+    Vec3f sp90;
+    Vec3f sp84;
+
+    actor = play->actorCtx.actorLists[ACTORCAT_ITEMACTION].first;
+    while (actor != NULL) {
+        if (((actor->id != ACTOR_ARMS_HOOK) && (actor->id != ACTOR_EN_ARROW)) || (actor == refActor)) {
+            actor = actor->next;
+        } else {
+            //! @bug The projectile actor gets unsafely casted to a hookshot to check its timer, even though
+            //! it can also be an arrow.
+            //  Luckily, the field at the same offset in the arrow actor is the x component of a vector
+            //  which will rarely ever be 0. So it's very unlikely for this bug to cause an issue.
+            if ((Math_Vec3f_DistXYZ(&refActor->world.pos, &actor->world.pos) > radius) ||
+                (((ArmsHook*)actor)->timer == 0)) {
+                actor = actor->next;
+            } else {
+                delta.x = (actor->speed * 10.0f) * Math_SinS(actor->world.rot.y);
+                delta.y = actor->velocity.y + (actor->gravity * 10.0f);
+                delta.z = (actor->speed * 10.0f) * Math_CosS(actor->world.rot.y);
+
+                spA8.x = actor->world.pos.x + delta.x;
+                spA8.y = actor->world.pos.y + delta.y;
+                spA8.z = actor->world.pos.z + delta.z;
+
+                if (CollisionCheck_CylSideVsLineSeg(refActor->colChkInfo.cylRadius, refActor->colChkInfo.cylHeight,
+                                                    0.0f, &refActor->world.pos, &actor->world.pos, &spA8, &sp90,
+                                                    &sp84)) {
+                    return actor;
+                } else {
+                    actor = actor->next;
+                }
+            }
+        }
+    }
+
+    return NULL;
+}
+
+// copied from OOT
+Actor* func_80033684(PlayState* play, Actor* explosiveActor) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_EXPLOSIVES].first;
+
+    while (actor != NULL) {
+        if ((actor == explosiveActor) || (actor->params != 1)) {
+            actor = actor->next;
+        } else {
+            if (Actor_WorldDistXYZToActor(explosiveActor, actor) <= (actor->shape.rot.z * 10) + 80.0f) {
+                return actor;
+            } else {
+                actor = actor->next;
+            }
+        }
+    }
+
+    return NULL;
 }
 
 Actor* EnTorch2_GetAttackItem(PlayState* play, Player* this) {
@@ -209,6 +271,25 @@ void EnTorch2_Backflip(Player* this, Input* input, Actor* thisx) {
     sCounterState = 0;
 }
 
+f32 D_801305B0 = 0.7950898f;
+s8 D_801305B4 = 35;
+
+s32 func_800354B4(PlayState* play, Actor* actor, f32 range, s16 arg3, s16 arg4, s16 arg5) {
+    Player* player = GET_PLAYER(play);
+    s16 var1;
+    s16 var2;
+
+    var1 = (s16)(actor->yawTowardsPlayer + 0x8000) - player->actor.shape.rot.y;
+    var2 = actor->yawTowardsPlayer - arg5;
+
+    if ((actor->xzDistToPlayer <= range) && (player->meleeWeaponState != 0) && (arg4 >= ABS(var1)) &&
+        (arg3 >= ABS(var2))) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 void EnTorch2_Update(Actor* thisx, PlayState* play2) {
     PlayState* play = play2;
     Player* player2 = GET_PLAYER(play2);
@@ -233,7 +314,7 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
             this->skelAnime.playSpeed = 0.0f;
             this->actor.world.pos.x = (Math_SinS(this->actor.world.rot.y) * 25.0f) + sSpawnPoint.x;
             this->actor.world.pos.z = (Math_CosS(this->actor.world.rot.y) * 25.0f) + sSpawnPoint.z;
-            if ((this->actor.xzDistToPlayer <= 120.0f) || Actor_IsLockedOn(play, &this->actor) ||
+            if ((this->actor.xzDistToPlayer <= 120.0f) || Actor_IsTargeted(play, &this->actor) ||
                 (attackItem != NULL)) {
                 if (attackItem != NULL) {
                     sDodgeRollState = 1;
@@ -247,7 +328,7 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
                     if (stickY) {}
                     sInput.cur.stick_y = stickY;
                 }
-                func_800F5ACC(NA_BGM_MINI_BOSS);
+                Audio_PlayBgm_StorePrevBgm(NA_BGM_MINI_BOSS);
                 sActionState = ENTORCH2_ATTACK;
             }
             break;
@@ -348,7 +429,8 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
                             EnTorch2_SwingSword(play, input, this);
                             sSwordJumpState++;
                         } else if (sSwordJumpTimer == 19) {
-                            func_800F4190(&this->actor.projectedPos, NA_SE_VO_LI_AUTO_JUMP);
+                            // func_800F4190(&this->actor.projectedPos, NA_SE_VO_LI_AUTO_JUMP);
+                            AudioSfx_PlaySfx(NA_SE_VO_LI_AUTO_JUMP, &this->actor.projectedPos, 4, &D_801305B0, &gSfxDefaultFreqAndVolScale, &D_801305B4);
                         }
                     }
                 } else {
@@ -370,7 +452,7 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
                             if ((this->meleeWeaponState == 0) && (sCounterState == 0) &&
                                 (player->invincibilityTimer == 0) &&
                                 (player->meleeWeaponAnimation == PLAYER_MWA_STAB_1H) &&
-                                (this->actor.xzDistToPlayer <= 85.0f) && Actor_IsLockedOn(play, &this->actor)) {
+                                (this->actor.xzDistToPlayer <= 85.0f) && Actor_IsTargeted(play, &this->actor)) {
 
                                 sStickTilt = 0.0f;
                                 sSwordJumpState = 1;
@@ -382,7 +464,8 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
                                 this->invincibilityTimer = -7;
                                 this->speedXZ = 0.0f;
                                 player->skelAnime.curFrame = 2.0f;
-                                LinkAnimation_Update(play, &player->skelAnime);
+                                // LinkAnimation_Update(play, &player->skelAnime);
+                                PlayerAnimation_Update(play, &player->skelAnime);
                                 sHoldShieldTimer = 0;
                                 input->cur.button = BTN_A;
                             } else {
@@ -681,7 +764,8 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
         }
         if (staggerThreshold < sStaggerCount) {
             this->skelAnime.playSpeed *= 0.6f;
-            func_800F4190(&this->actor.projectedPos, NA_SE_PL_DAMAGE);
+            // func_800F4190(&this->actor.projectedPos, NA_SE_PL_DAMAGE);
+            AudioSfx_PlaySfx(NA_SE_PL_DAMAGE, &this->actor.projectedPos, 4, &D_801305B0, &gSfxDefaultFreqAndVolScale, &D_801305B4);
             sStaggerTimer = 0;
             sStaggerCount = 0;
         }
@@ -706,7 +790,8 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
             this->meleeWeaponState = 1;
             this->skelAnime.curFrame = player->skelAnime.curFrame - player->skelAnime.playSpeed;
             this->skelAnime.playSpeed = player->skelAnime.playSpeed;
-            LinkAnimation_Update(play, &this->skelAnime);
+            // LinkAnimation_Update(play, &this->skelAnime);
+            PlayerAnimation_Update(play, &this->skelAnime);
             Collider_ResetQuadAT(play, &this->meleeWeaponQuads[0].base);
             Collider_ResetQuadAT(play, &this->meleeWeaponQuads[1].base);
         }
@@ -756,14 +841,17 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
     this->actor.shape.yOffset = sSwordJumpHeight;
 }
 
-s32 EnTorch2_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx,
+s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
+                                          Actor* thisx);
+
+s32 EnTorch2_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, Actor* thisx,
                               Gfx** gfx) {
     Player* this = (Player*)thisx;
 
     return Player_OverrideLimbDrawGameplayCommon(play, limbIndex, dList, pos, rot, &this->actor);
 }
 
-void EnTorch2_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx, Gfx** gfx) {
+void EnTorch2_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, Actor* thisx, Gfx** gfx) {
     Player* this = (Player*)thisx;
 
     Player_PostLimbDrawGameplay(play, limbIndex, dList, NULL, rot, &this->actor);
@@ -776,14 +864,78 @@ Gfx D_80116280[] = {
     gsSPEndDisplayList(),
 };
 
+Hilite* Hilite_DrawOpa(Vec3f* object, Vec3f* eye, Vec3f* lightDir, GraphicsContext* gfxCtx);
+Hilite* Hilite_DrawXlu(Vec3f* object, Vec3f* eye, Vec3f* lightDir, GraphicsContext* gfxCtx);
+
+void func_8002EBCC(Actor* actor, PlayState* play, s32 flag) {
+    Hilite* hilite;
+    Vec3f lightDir;
+    Gfx* displayListHead;
+    Gfx* displayList;
+
+    lightDir.x = play->envCtx.dirLight1.params.dir.x;
+    lightDir.y = play->envCtx.dirLight1.params.dir.y;
+    lightDir.z = play->envCtx.dirLight1.params.dir.z;
+
+    hilite = Hilite_DrawOpa(&actor->world.pos, &play->view.eye, &lightDir, play->state.gfxCtx);
+
+    if (flag != 0) {
+        displayList = GRAPH_ALLOC(play->state.gfxCtx, 2 * sizeof(Gfx));
+        displayListHead = displayList;
+
+        OPEN_DISPS(play->state.gfxCtx);
+
+        gDPSetHilite1Tile(displayListHead++, 1, hilite, 16, 16);
+        gSPEndDisplayList(displayListHead);
+        gSPSegment(POLY_OPA_DISP++, 0x07, displayList);
+
+        CLOSE_DISPS(play->state.gfxCtx);
+    }
+}
+
+void func_8002ED80(Actor* actor, PlayState* play, s32 flag) {
+    Hilite* hilite;
+    Vec3f lightDir;
+    Gfx* displayListHead;
+    Gfx* displayList;
+
+    lightDir.x = play->envCtx.dirLight1.params.dir.x;
+    lightDir.y = play->envCtx.dirLight1.params.dir.y;
+    lightDir.z = play->envCtx.dirLight1.params.dir.z;
+
+    hilite = Hilite_DrawXlu(&actor->world.pos, &play->view.eye, &lightDir, play->state.gfxCtx);
+
+    if (flag != 0) {
+        displayList = GRAPH_ALLOC(play->state.gfxCtx, 2 * sizeof(Gfx));
+        displayListHead = displayList;
+
+        OPEN_DISPS(play->state.gfxCtx);
+
+        gDPSetHilite1Tile(displayListHead++, 1, hilite, 16, 16);
+        gSPEndDisplayList(displayListHead);
+        gSPSegment(POLY_XLU_DISP++, 0x07, displayList);
+
+        CLOSE_DISPS(play->state.gfxCtx);
+    }
+}
+
 void EnTorch2_Draw(Actor* thisx, PlayState* play2) {
     PlayState* play = play2;
     Player* this = (Player*)thisx;
     s32 pad;
 
     OPEN_DISPS(play->state.gfxCtx);
-    func_80093C80(play);
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    // func_80093C80(play);
+
+    Gfx_SetupDL25_Opa(play->state.gfxCtx);
+    // apparently whatever's below here goes unused?
+    if (play->roomCtx.curRoom.type == ROOM_TYPE_3) {
+        OPEN_DISPS(play->state.gfxCtx);
+        gDPSetColorDither(POLY_OPA_DISP++, G_CD_DISABLE);
+        CLOSE_DISPS(play->state.gfxCtx);
+    }
+
+    Gfx_SetupDL25_Xlu(play->state.gfxCtx);
     if (sAlpha == 255) {
         gDPSetEnvColor(POLY_OPA_DISP++, 255, 0, 0, sAlpha);
         gSPSegment(POLY_OPA_DISP++, 0x0C, D_80116280 + 2);
@@ -791,7 +943,7 @@ void EnTorch2_Draw(Actor* thisx, PlayState* play2) {
         func_8002ED80(&this->actor, play, 0);
         POLY_OPA_DISP =
             SkelAnime_DrawFlex(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount,
-                               EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDraw, this, POLY_OPA_DISP);
+                               EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDraw, &this->actor, POLY_OPA_DISP);
     } else {
         gDPSetEnvColor(POLY_XLU_DISP++, 255, 0, 0, sAlpha);
         gSPSegment(POLY_XLU_DISP++, 0x0C, D_80116280);
@@ -799,7 +951,7 @@ void EnTorch2_Draw(Actor* thisx, PlayState* play2) {
         func_8002ED80(&this->actor, play, 0);
         POLY_XLU_DISP =
             SkelAnime_DrawFlex(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount,
-                               EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDraw, this, POLY_XLU_DISP);
+                               EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDraw, &this->actor, POLY_XLU_DISP);
     }
     CLOSE_DISPS(play->state.gfxCtx);
 }
