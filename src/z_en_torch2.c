@@ -906,15 +906,171 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
 
 s32 EnTorch2_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, Actor* thisx,
                               Gfx** gfx) {
-    Player* this = (Player*)thisx;
+    EnTorch2* this = (EnTorch2 *)thisx;
 
-    return Player_OverrideLimbDrawGameplayCommon(play, limbIndex, dList, pos, rot, &this->actor);
+    return Player_OverrideLimbDrawGameplayCommon(play, limbIndex, dList, pos, rot, &this->player.actor);
 }
 
-void EnTorch2_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, Actor* thisx, Gfx** gfx) {
-    Player* this = (Player*)thisx;
+extern Vec3f *sPlayerCurBodyPartPos;
+extern Vec3f D_801C0994[];
+extern Vec3f sPlayerGetItemRefPos;
+extern AnimatedMaterial gameplay_keep_Matanimheader_054F18[];
+extern Gfx gameplay_keep_DL_054C90[];
+void Player_UpdateShieldCollider(PlayState *play, Player *player, ColliderQuad *collider, Vec3f quadSrc[4]);
+void func_8012536C(void);
 
-    Player_PostLimbDrawGameplay(play, limbIndex, dList, NULL, rot, &this->actor);
+void EnTorch2_PostLimbDrawGameplay(PlayState *play, s32 limbIndex, Gfx **dList, Vec3s *rot, Actor *thisx, Gfx **gfx) {
+    EnTorch2 *this = (EnTorch2 *)thisx;
+    Player *player = &this->player;
+
+    if (limbIndex == PLAYER_LIMB_LEFT_HAND) {
+        Math_Vec3f_Copy(&player->leftHandWorld.pos, sPlayerCurBodyPartPos);
+
+        if (player->actor.scale.y >= 0.0f) {
+            Actor *heldActor;
+            MtxF sp230;
+
+            if (!Player_IsHoldingHookshot(player) && ((heldActor = player->heldActor) != NULL)) {
+                if (player->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) {
+                    heldActor->world.rot.y = heldActor->shape.rot.y =
+                        player->actor.shape.rot.y + player->leftHandWorld.rot.y;
+                }
+            } else {
+                static f32 sMeleeWeaponLengths[PLAYER_MELEEWEAPON_MAX] = {
+                    0.0f,    // PLAYER_MELEEWEAPON_NONE
+                    3000.0f, // PLAYER_MELEEWEAPON_SWORD_KOKIRI
+                    3000.0f, // PLAYER_MELEEWEAPON_SWORD_RAZOR
+                    4000.0f, // PLAYER_MELEEWEAPON_SWORD_GILDED
+                    5500.0f, // PLAYER_MELEEWEAPON_SWORD_TWO_HANDED
+                    -1.0f,   // PLAYER_MELEEWEAPON_DEKU_STICK
+                    2500.0f, // PLAYER_MELEEWEAPON_ZORA_BOOMERANG
+                };
+
+                if ((player->transformation == PLAYER_FORM_FIERCE_DEITY) ||
+                    ((player->transformation != PLAYER_FORM_ZORA) &&
+                     ((player->itemAction == PLAYER_IA_DEKU_STICK) ||
+                      ((player->meleeWeaponState != PLAYER_MELEE_WEAPON_STATE_0) &&
+                       (player->meleeWeaponAnimation != PLAYER_MWA_GORON_PUNCH_RIGHT) &&
+                       (player->meleeWeaponAnimation != PLAYER_MWA_GORON_PUNCH_BUTT))))) {
+                    if (player->itemAction == PLAYER_IA_DEKU_STICK) {
+                        D_801C0994->x = player->unk_B0C * 5000.0f;
+                    } else {
+                        D_801C0994->x = sMeleeWeaponLengths[Player_GetMeleeWeaponHeld(player)];
+                    }
+                    func_80126B8C(play, player);
+                }
+
+                Matrix_Get(&player->leftHandMf);
+                Matrix_MtxFToYXZRot(&player->leftHandMf, &player->leftHandWorld.rot, false);
+            }
+        }
+    } else if (limbIndex == PLAYER_LIMB_RIGHT_HAND) {
+        Actor *heldActor = player->heldActor;
+
+        if (player->actor.scale.y >= 0.0f) {
+            if (player->rightHandType == PLAYER_MODELTYPE_RH_FF) {
+                Matrix_Get(&player->shieldMf);
+            } else if (player->rightHandType == PLAYER_MODELTYPE_RH_SHIELD) {
+                // Coordinates of the shield quad collider vertices, in the right hand limb's own model space.
+                static Vec3f sRightHandLimbModelShieldQuadVertices[4] = {
+                    {-4500.0f, -3000.0f, -600.0f},
+                    {1500.0f, -3000.0f, -600.0f},
+                    {-4500.0f, 3000.0f, -600.0f},
+                    {1500.0f, 3000.0f, -600.0f},
+                };
+
+                Matrix_Get(&player->shieldMf);
+                Player_UpdateShieldCollider(play, player, &player->shieldQuad, sRightHandLimbModelShieldQuadVertices);
+            }
+
+            if ((player->getItemDrawIdPlusOne != (GID_NONE + 1)) ||
+                ((func_800B7118(player) == 0) && (heldActor != NULL))) {
+                if (!(player->stateFlags1 & PLAYER_STATE1_400) && (player->getItemDrawIdPlusOne != (GID_NONE + 1)) &&
+                    (player->exchangeItemAction != PLAYER_IA_NONE)) {
+                    Math_Vec3f_Copy(&sPlayerGetItemRefPos, &player->leftHandWorld.pos);
+                } else {
+                    sPlayerGetItemRefPos.x =
+                        (player->bodyPartsPos[PLAYER_BODYPART_RIGHT_HAND].x + player->leftHandWorld.pos.x) * 0.5f;
+                    sPlayerGetItemRefPos.y =
+                        (player->bodyPartsPos[PLAYER_BODYPART_RIGHT_HAND].y + player->leftHandWorld.pos.y) * 0.5f;
+                    sPlayerGetItemRefPos.z =
+                        (player->bodyPartsPos[PLAYER_BODYPART_RIGHT_HAND].z + player->leftHandWorld.pos.z) * 0.5f;
+                }
+
+                if (player->getItemDrawIdPlusOne == (GID_NONE + 1)) {
+                    Math_Vec3f_Copy(&heldActor->world.pos, &sPlayerGetItemRefPos);
+                }
+            }
+        }
+    } else if (limbIndex == PLAYER_LIMB_LEFT_FOREARM) {
+        // do nothing
+    } else if (limbIndex == PLAYER_LIMB_RIGHT_FOREARM) {
+        // do nothing
+    } else if (limbIndex == PLAYER_LIMB_TORSO) {
+        // do nothing
+    } else if (limbIndex == PLAYER_LIMB_HEAD) {
+        if ((player->stateFlags1 & (PLAYER_STATE1_2 | PLAYER_STATE1_100)) && (player->av2.actionVar2 != 0)) {
+            static Vec3f D_801C0E40[PLAYER_FORM_MAX] = {
+                {0.0f, 0.0f, 0.0f},        // PLAYER_FORM_FIERCE_DEITY
+                {-578.3f, -1100.9f, 0.0f}, // PLAYER_FORM_GORON
+                {-189.5f, -594.87f, 0.0f}, // PLAYER_FORM_ZORA
+                {-570.0f, -812.0f, 0.0f},  // PLAYER_FORM_DEKU
+                {-230.0f, -520.0f, 0.0f},  // PLAYER_FORM_HUMAN
+            };
+            Vec3f *temp_s0_7 = &D_801C0E40[player->transformation];
+
+            OPEN_DISPS(play->state.gfxCtx);
+
+            Matrix_Push();
+            AnimatedMat_DrawXlu(play, Lib_SegmentedToVirtual(gameplay_keep_Matanimheader_054F18));
+            Matrix_Translate(temp_s0_7->x, temp_s0_7->y, 0.0f, MTXMODE_APPLY);
+            if (player->transformation == PLAYER_FORM_ZORA) {
+                Matrix_Scale(0.7f, 0.7f, 0.7f, MTXMODE_APPLY);
+            }
+
+            MATRIX_FINALIZE_AND_LOAD(POLY_XLU_DISP++, play->state.gfxCtx);
+            gDPSetEnvColor(POLY_XLU_DISP++, 0, 0, 255, (u8)player->av2.actionVar2);
+            gSPDisplayList(POLY_XLU_DISP++, gameplay_keep_DL_054C90);
+
+            Matrix_Pop();
+
+            CLOSE_DISPS(play->state.gfxCtx);
+        }
+        if (player->actor.scale.y >= 0.0f) {
+            static Vec3f sPlayerFocusHeadLimbModelPos = {1100.0f, -700.0f, 0.0f};
+
+            Matrix_MultVec3f(&sPlayerFocusHeadLimbModelPos, &player->actor.focus.pos);
+        }
+    } else if ((limbIndex == PLAYER_LIMB_HAT) && (player->stateFlags3 & PLAYER_STATE3_100000)) {
+        Vec3f sp5C;
+        Vec3f sp50;
+
+        Matrix_MultVecX(3000.0f, &sp5C);
+        Matrix_MultVecX(2300.0f, &sp50);
+        if (func_80126440(play, NULL, player->meleeWeaponInfo, &sp5C, &sp50)) {
+            EffectBlure_AddVertex(Effect_GetByIndex(player->meleeWeaponEffectIndex[0]), &player->meleeWeaponInfo[0].tip,
+                                  &player->meleeWeaponInfo[0].base);
+        }
+    } else if (limbIndex == PLAYER_LIMB_RIGHT_SHIN) {
+        // do nothing
+    } else if (limbIndex == PLAYER_LIMB_WAIST) {
+        // do nothing
+    } else if (limbIndex == PLAYER_LIMB_SHEATH) {
+        if (player->actor.scale.y >= 0.0f) {
+            if ((player->rightHandType != PLAYER_MODELTYPE_RH_SHIELD) &&
+                (player->rightHandType != PLAYER_MODELTYPE_RH_FF)) {
+                static Vec3f sSheathLimbModelShieldOnBackPos = {630.0f, 100.0f, -30.0f};
+                static Vec3s sSheathLimbModelShieldOnBackZyxRot = {0, 0, 0x7FFF};
+
+                Matrix_TranslateRotateZYX(&sSheathLimbModelShieldOnBackPos, &sSheathLimbModelShieldOnBackZyxRot);
+                Matrix_Get(&player->shieldMf);
+            }
+        }
+    } else if (player->actor.scale.y >= 0.0f) {
+        Player_SetFeetPos(play, player, limbIndex);
+    }
+
+    func_8012536C();
 }
 
 Gfx D_80116280[] = {
@@ -988,6 +1144,9 @@ void EnTorch2_Draw(Actor* thisx, PlayState* play2) {
     OPEN_DISPS(play->state.gfxCtx);
     // func_80093C80(play);
 
+    gSPSegment(POLY_OPA_DISP++, 0x0C, gCullBackDList);
+    gSPSegment(POLY_XLU_DISP++, 0x0C, gCullBackDList);
+
     Gfx_SetupDL25_Opa(play->state.gfxCtx);
     // apparently whatever's below here goes unused?
     if (play->roomCtx.curRoom.type == ROOM_TYPE_3) {
@@ -1006,7 +1165,7 @@ void EnTorch2_Draw(Actor* thisx, PlayState* play2) {
             // SkelAnime_DrawFlex(play, player->skelAnime.skeleton, player->skelAnime.jointTable, player->skelAnime.dListCount,
             //                    EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDraw, &player->actor, POLY_OPA_DISP);
             SkelAnime_DrawFlex(play, player->skelAnime.skeleton, player->skelAnime.jointTable, player->skelAnime.dListCount,
-                               NULL, NULL, &player->actor, POLY_OPA_DISP);
+                               EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDrawGameplay, &player->actor, POLY_OPA_DISP);
     } else {
         gDPSetEnvColor(POLY_XLU_DISP++, 255, 0, 0, this->alpha);
         gSPSegment(POLY_XLU_DISP++, 0x0C, D_80116280);
@@ -1016,7 +1175,7 @@ void EnTorch2_Draw(Actor* thisx, PlayState* play2) {
             // SkelAnime_DrawFlex(play, player->skelAnime.skeleton, player->skelAnime.jointTable, player->skelAnime.dListCount,
             //                    EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDraw, &player->actor, POLY_XLU_DISP);
             SkelAnime_DrawFlex(play, player->skelAnime.skeleton, player->skelAnime.jointTable, player->skelAnime.dListCount,
-                               NULL, NULL, &player->actor, POLY_XLU_DISP);
+                               EnTorch2_OverrideLimbDraw, EnTorch2_PostLimbDrawGameplay, &player->actor, POLY_XLU_DISP);
     }
     CLOSE_DISPS(play->state.gfxCtx);
 }
