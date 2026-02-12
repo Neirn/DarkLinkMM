@@ -147,19 +147,15 @@ void EnTorch2_Init(Actor* thisx, PlayState* play2) {
 
     // copied from oot age properties
     darkLinkProperties = sPlayerAgeProperties[PLAYER_FORM_ZORA];
-    darkLinkProperties = sPlayerAgeProperties[PLAYER_FORM_ZORA];
     darkLinkProperties.unk_28 = 44.8f;
     darkLinkProperties.unk_3C = 15.0f;
+    PlayerAgeProperties *fdProps = &sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY];
     darkLinkProperties.unk_44 = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_44;
-    darkLinkProperties.unk_4A->x = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_4A->x;
-    darkLinkProperties.unk_4A->y = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_4A->y;
-    darkLinkProperties.unk_4A->z = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_4A->z;
-    darkLinkProperties.unk_62->x = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_62->x;
-    darkLinkProperties.unk_62->y = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_62->y;
-    darkLinkProperties.unk_62->z = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_62->z;
-    darkLinkProperties.unk_7A->x = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_7A->x;
-    darkLinkProperties.unk_7A->y = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_7A->y;
-    darkLinkProperties.unk_7A->z = sPlayerAgeProperties[PLAYER_FORM_FIERCE_DEITY].unk_7A->z;
+    for (int i = 0; i < 4; ++i) {
+        darkLinkProperties.unk_4A[i] = fdProps->unk_4A[i];
+        darkLinkProperties.unk_62[i] = fdProps->unk_62[i];
+        darkLinkProperties.unk_7A[i] = fdProps->unk_7A[i];
+    }
     darkLinkProperties.voiceSfxIdOffset = SFX_VOICE_BANK_SIZE * 0;
     darkLinkProperties.surfaceSfxIdOffset = 0x80;
 
