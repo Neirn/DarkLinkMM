@@ -642,7 +642,8 @@ void EnTorch2_Update(Actor *thisx, PlayState *play2) {
         case ENTORCH2_DAMAGE:
             player1->meleeWeaponState = 0;
             input->cur.stick_x = input->cur.stick_y = 0;
-            if ((player1->invincibilityTimer > 0) && (player1->actor.world.pos.y < (player1->actor.floorHeight - 160.0f))) {
+            // TODO: investigate why this condition needs to be commented out
+            if (/* (player1->invincibilityTimer > 0) && */ (player1->actor.world.pos.y < (player1->actor.floorHeight - 160.0f))) {
                 player1->stateFlags3 &= ~PLAYER_STATE3_1;
                 player1->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED;
                 player1->invincibilityTimer = 0;
