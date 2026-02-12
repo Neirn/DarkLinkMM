@@ -1043,3 +1043,43 @@ void EnTorch2_Draw(Actor* thisx, PlayState* play2) {
     }
     CLOSE_DISPS(play->state.gfxCtx);
 }
+
+static Player *sPlayerFromGetIdleAnim;
+
+RECOMP_HOOK("Player_GetIdleAnim")
+void fixDinkIdle_on_Player_GetIdleAnim(Player *this) {
+    if (this->actor.id == CUSTOM_ACTOR_EN_DARKLINK) {
+        sPlayerFromGetIdleAnim = this;
+        this->actor.id = ACTOR_PLAYER;
+    } else {
+        sPlayerFromGetIdleAnim = NULL;
+    }
+}
+
+RECOMP_HOOK_RETURN("Player_GetIdleAnim")
+void fixDarkLinkIdle_on_return_Player_GetIdleAnim(void) {
+    if (sPlayerFromGetIdleAnim) {
+        sPlayerFromGetIdleAnim->actor.id = CUSTOM_ACTOR_EN_DARKLINK;
+    }
+}
+
+static Actor *sFocusActorFromUpdateHostileLockOn;
+static u32 sStoredActorFlags;
+
+RECOMP_HOOK("Player_UpdateHostileLockOn")
+void fixDarkLinkFightingAnims_on_Player_UpdateHostileLockOn(Player *this) {
+    if (this->actor.id == CUSTOM_ACTOR_EN_DARKLINK && this->focusActor && this->focusActor->id == ACTOR_PLAYER) {
+        sFocusActorFromUpdateHostileLockOn = this->focusActor;
+        sStoredActorFlags = this->focusActor->flags;
+        this->focusActor->flags |= (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE);
+    } else {
+        sFocusActorFromUpdateHostileLockOn = NULL;
+    }
+}
+
+RECOMP_HOOK_RETURN("Player_UpdateHostileLockOn")
+void fixDarkLinkFightingAnims_on_return_Player_UpdateHostileLockOn() {
+    if (sFocusActorFromUpdateHostileLockOn) {
+        sFocusActorFromUpdateHostileLockOn->flags = sStoredActorFlags;
+    }
+}
