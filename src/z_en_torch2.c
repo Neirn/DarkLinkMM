@@ -1238,3 +1238,17 @@ void fixDarkLinkDmg_on_return_func_808339D4(void) {
         sPlayerfunc_808339D4->actor.id = CUSTOM_ACTOR_EN_DARKLINK;
     }
 }
+
+static Player *sPlayerForPlayerResetCylinder;
+
+RECOMP_HOOK("Player_ResetCylinder")
+void fixDarkLinkCylinder_on_Player_ResetCylinder(Player *this) {
+    sPlayerForPlayerResetCylinder = this;
+}
+
+RECOMP_HOOK_RETURN("Player_ResetCylinder")
+void fixDarkLinkCylinder_on_return_Player_ResetCylinder(void) {
+    if (sPlayerForPlayerResetCylinder->actor.id == CUSTOM_ACTOR_EN_DARKLINK) {
+        sPlayerForPlayerResetCylinder->cylinder.base.acFlags = AC_ON | AC_TYPE_PLAYER;
+    }
+}
