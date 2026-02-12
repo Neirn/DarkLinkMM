@@ -1253,3 +1253,18 @@ void fixDarkLinkCylinder_on_return_Player_ResetCylinder(void) {
         sPlayerForPlayerResetCylinder->cylinder.base.acFlags = AC_ON | AC_TYPE_PLAYER;
     }
 }
+
+RECOMP_HOOK("Player_AnimSfx_PlayVoice")
+void fixDarkLinkVoice_on_Player_AnimSfx_PlayVoice(Player *this, u16 sfxId) {
+    if (this->actor.id == CUSTOM_ACTOR_EN_DARKLINK) {
+        u16 sfxOffset;
+
+        if (this->currentMask == PLAYER_MASK_SCENTS) {
+            sfxOffset = SFX_VOICE_BANK_SIZE * 7;
+        } else {
+            sfxOffset = this->ageProperties->voiceSfxIdOffset;
+        }
+
+        AudioSfx_PlaySfx(sfxId + sfxOffset, &this->actor.projectedPos, 4, &D_801305B0, &gSfxDefaultFreqAndVolScale, &D_801305B4);
+    }
+}
